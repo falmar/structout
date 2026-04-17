@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -65,15 +67,43 @@ func createKit(
 }
 
 func runOllamGenerate(ctx context.Context, g *genkit.Genkit, model string) error {
-	text, err := genkit.GenerateText(ctx, g,
-		ai.WithSystem("Star Wars: The Clone Wars\n---\nYou are: General Gravious\nCurrently stationed at: Utapau"),
-		ai.WithPrompt("Jedi: Hello there!"),
+	type Lightsaber struct {
+		Color string `json:"color" jsonschema:"enum=blue,enum=green" jsonschema_description:"blade color"`
+	}
+
+	unsheatheLightsaber := genkit.DefineTool(g, "response_tool", "Choose a color for your lightsaber",
+		func(ctx *ai.ToolContext, l Lightsaber) (any, error) {
+			fmt.Println("pop lightsaber!", l.Color)
+			return nil, ai.InterruptWith(ctx, l)
+		},
+	)
+
+	resp, err := genkit.Generate(ctx, g,
+		ai.WithSystem("You are General Grievous. Use must call response_tool first before your response."),
+		ai.WithPrompt("Obi-Wan Kenobi: Hello there"),
 		ai.WithModelName(model),
+		ai.WithTools(unsheatheLightsaber),
 	)
 	if err != nil {
 		return err
 	}
 
-	fmt.Println(text)
-	return nil
+	if resp.FinishReason == ai.FinishReasonInterrupted {
+		for _, it := range resp.Interrupts() {
+			out, ok := ai.InterruptAs[Lightsaber](it)
+			if !ok {
+				continue
+			}
+
+			b, err := json.Marshal(out)
+			if err != nil {
+				return err
+			}
+
+			fmt.Println("structured output", string(b))
+			return nil
+		}
+	}
+
+	return errors.New("failed to call tool with interrupt")
 }
