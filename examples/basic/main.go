@@ -80,26 +80,24 @@ type Lightsaber struct {
 
 func chooseLightsaberColor(ctx context.Context, g *genkit.Genkit, model string) (Jedi, error) {
 	var zero Jedi
+	soTool := structout.DefineInterruptTool(g, zero)
 
-	resp, err := structout.GenerateStructuredOutput[Jedi](ctx, g,
-		// slice of messages is used to inject instruction to call the tool in the system message
-		[]*ai.Message{
-			ai.NewSystemTextMessage("You are about to become a Jedi in the Star Wars universe.\nFollow the instructions."),
-			ai.NewUserTextMessage("Young Padawan what your name and color of choice for your lightsaber?."),
-		},
-
-		// if you have more tools pass them here
-		nil, // []ai.ToolRef{...}
-
-		// pass regular ai.GeneraetOption
+	resp, err := genkit.Generate(ctx, g,
 		ai.WithModelName(model),
 		ai.WithConfig(ai.GenerationCommonConfig{
 			Temperature: 1,
 		}),
+
+		// inject intstructions for calling the output tool to the SystemMessage
+		structout.WithSystem(soTool, "You are about to become a Jedi in the Star Wars universe.\nFollow the instructions."),
+		ai.WithPrompt("Young Padawan what your name and color of choice for your lightsaber?."),
+
+		// add the tool
+		ai.WithTools(soTool),
 	)
 	if err != nil {
 		return zero, err
 	}
 
-	return resp, nil
+	return structout.FromInterruptTool[Jedi](resp)
 }
