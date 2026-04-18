@@ -1,4 +1,4 @@
-module github.com/falmar/genkit-ghool
+module github.com/falmar/structout
 
 go 1.26.1
 
