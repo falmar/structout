@@ -75,20 +75,12 @@ type Jedi struct {
 }
 
 type Lightsaber struct {
-	Color string `json:"color" jsonschema:"enum=blue,enum=green,enum=purple" jsonschema_description:"choose the color of the lightsaber to unsheathe"`
-}
-
-type SumRequest struct {
-	A int `json:"a" jsonschema_description:"number a"`
-	B int `json:"b" jsonschema_description:"number b"`
+	Color string `json:"color" jsonschema:"enum=blue,enum=green,enum=purple" jsonschema_description:"choose the color of the lightsaber"`
 }
 
 func chooseLightsaberColor(ctx context.Context, g *genkit.Genkit, model string) (Jedi, error) {
 	var zero Jedi
-	structuredOutputTool := structout.DefineOutputTool(g, zero)
-	sumTool := genkit.DefineTool(g, "sum_numbers", "sum numbers", func(ctx *ai.ToolContext, input SumRequest) (int, error) {
-		return input.A + input.B, nil
-	})
+	structOutput := structout.Define[Jedi](g)
 
 	data, _, err := genkit.GenerateData[Jedi](ctx, g,
 		ai.WithModelName(model),
@@ -97,17 +89,17 @@ func chooseLightsaberColor(ctx context.Context, g *genkit.Genkit, model string) 
 		}),
 
 		// inject intstructions for calling the output tool to the SystemMessage
-		ai.WithSystem("You are about to become a Jedi in the Star Wars universe.\nFollow the instructions."),
-		ai.WithPrompt("Young Padawan what your name and color of choice for your lightsaber?. sum the two numbers using the sum tool first, once you have it add the summed number to your name."),
+		ai.WithSystem("*Star Wars universe.*\nFollow the instructions."),
+		ai.WithPrompt("Young Padawan what is your name and color of choice for your lightsaber?."),
 
 		// add the tool
-		ai.WithTools(structuredOutputTool, sumTool),
+		ai.WithTools(structOutput.Tool),
 
 		// add capture middleware
-		ai.WithMiddleware(structout.OutputMiddleware(structuredOutputTool)),
+		ai.WithMiddleware(structOutput.Middleware),
 
 		// Native output helper
-		ai.WithOutputInstructions(structout.ToolCallInstruction(structuredOutputTool.Name())),
+		ai.WithOutputInstructions(structOutput.Instruction),
 	)
 	if err != nil {
 		return zero, err
