@@ -14,4 +14,9 @@ better than asking the model to conform the schema
 > NOTE2: sadly it relies on the tool interrupt mechanism
 > and it is considered "warning/error" traces on the Dev UI
 
+> NOTE3: i've added a just that tool that just returns its own input
+> and by changing the instructions for the llm to return that output verbatim
+> it does remove the interrupt mechanism but now its double round-trip
+> making the llm go for extraction of the tool response and put it back as last response
+
 Motivation: the lack of tool choice when using local models with genkit is painful

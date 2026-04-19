@@ -18,7 +18,7 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
 
-	modelName := "ollama/gemma4:26b"
+	modelName := "ollama/gemma4:e4b"
 
 	// setup genkit with ollama plugin
 	g := createKit(ctx, modelName)
@@ -70,8 +70,8 @@ func createKit(
 }
 
 type Jedi struct {
-	Name       string `json:"name" jsonschema_description:"your name"`
-	Lightsaber Lightsaber
+	Name       string     `json:"name" jsonschema_description:"your name"`
+	Lightsaber Lightsaber `json:"lightsaber" jsonschema_description:"your lightsaber"`
 }
 
 type Lightsaber struct {
@@ -80,7 +80,7 @@ type Lightsaber struct {
 
 func chooseLightsaberColor(ctx context.Context, g *genkit.Genkit, model string) (Jedi, error) {
 	var zero Jedi
-	soTool := structout.DefineInterruptTool(g, zero)
+	soTool := structout.DefineOutputTool(g, zero)
 
 	resp, err := genkit.Generate(ctx, g,
 		ai.WithModelName(model),
@@ -89,15 +89,20 @@ func chooseLightsaberColor(ctx context.Context, g *genkit.Genkit, model string) 
 		}),
 
 		// inject intstructions for calling the output tool to the SystemMessage
-		structout.WithSystem(soTool, "You are about to become a Jedi in the Star Wars universe.\nFollow the instructions."),
+		ai.WithSystem("You are about to become a Jedi in the Star Wars universe.\nFollow the instructions."),
 		ai.WithPrompt("Young Padawan what your name and color of choice for your lightsaber?."),
 
 		// add the tool
 		ai.WithTools(soTool),
+
+		// Native output helper
+		ai.WithOutputInstructions(structout.ToolCallInstruction(soTool.Name())),
+		ai.WithOutputType(Jedi{}),
 	)
 	if err != nil {
 		return zero, err
 	}
 
-	return structout.FromInterruptTool[Jedi](resp)
+	err = resp.Output(&zero)
+	return zero, err
 }

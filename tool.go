@@ -12,6 +12,9 @@ import (
 )
 
 var (
+	toolInterruptRegistry sync.Map
+	toolInterruptCounter  atomic.Uint64
+
 	toolRegistry sync.Map
 	toolCounter  atomic.Uint64
 
@@ -20,22 +23,44 @@ var (
 )
 
 type genkitStructuredOutput[T any] struct {
-	Output T
+	Instructions string `json:"instructions"`
+	Output       T      `json:"structured_output"`
 }
 
 // DefineInterruptTool returns the response tool for type T, reused across calls.
-// basic usage when is expected to be last tool call
+// it does interrupt the llm generation with the type T
 func DefineInterruptTool[T any](g *genkit.Genkit, t T) *ai.ToolDef[T, any] {
+	k := reflect.TypeOf(t)
+	if tool, ok := toolInterruptRegistry.Load(k); ok {
+		return tool.(*ai.ToolDef[T, any])
+	}
+
+	tool := genkit.DefineTool(g,
+		fmt.Sprintf("response_inttool_%d", toolInterruptCounter.Add(1)),
+		"REQUIRED: call this tool at final response to conform the structured output schema",
+		func(ctx *ai.ToolContext, l T) (any, error) {
+			return nil, ai.InterruptWith(ctx, genkitStructuredOutput[T]{Output: l})
+		},
+	)
+
+	toolInterruptRegistry.Store(k, tool)
+
+	return tool
+}
+
+// DefineOutputTool returns the response tool for type T, reused across calls.
+// marshals the input as text with instructions for the llm to return it as JSON verbatim
+func DefineOutputTool[T any](g *genkit.Genkit, t T) *ai.ToolDef[T, any] {
 	k := reflect.TypeOf(t)
 	if tool, ok := toolRegistry.Load(k); ok {
 		return tool.(*ai.ToolDef[T, any])
 	}
 
 	tool := genkit.DefineTool(g,
-		fmt.Sprintf("response_tool_%d", toolCounter.Add(1)),
-		"REQUIRED: call this tool at final response to conform the structured output schema",
-		func(ctx *ai.ToolContext, l T) (any, error) {
-			return nil, ai.InterruptWith(ctx, genkitStructuredOutput[T]{l})
+		fmt.Sprintf("response_formatter_%d", toolCounter.Add(1)),
+		"REQUIRED: call this tool to conform the structured output schema",
+		func(ctx *ai.ToolContext, t T) (any, error) {
+			return t, nil
 		},
 	)
 
